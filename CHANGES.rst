@@ -118,6 +118,8 @@ Unreleased
 -   Update type annotation for ``ProfilerMiddleware`` ``stream`` parameter.
     :issue:`2642`
 -   Use postponed evaluation of annotations. :pr:`2645`
+-   Add the optional flag ``safe_fallback`` to ``parse_form_data`` and
+    ``parse_from_environ`` in order to enable parsing from inifinite streams
 
 
 Version 2.2.3

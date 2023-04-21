@@ -72,6 +72,7 @@ def parse_form_data(
     max_content_length: int | None = None,
     cls: type[MultiDict] | None = None,
     silent: bool = True,
+    safe_fallback: bool = True,
 ) -> t_parse_result:
     """Parse the form data in the environ and return it as tuple in the form
     ``(stream, form, files)``.  You should only call this method if the
@@ -93,6 +94,9 @@ def parse_form_data(
     .. versionadded:: 0.5.1
        The optional `silent` flag was added.
 
+    .. versionadded:: 2.3.0
+       The optional `safe_fallback` flag was added.
+
     :param environ: the WSGI environment to be used for parsing.
     :param stream_factory: An optional callable that returns a new read and
                            writeable file descriptor.  This callable works
@@ -111,6 +115,9 @@ def parse_form_data(
     :param cls: an optional dict class to use.  If this is not specified
                        or `None` the default :class:`MultiDict` is used.
     :param silent: If set to False parsing errors will not be caught.
+    :param safe_fallback: Return an empty stream when ``Content-Length`` is
+        not set. Disabling this allows infinite streams, which can be a
+        denial-of-service risk.
     :return: A tuple in the form ``(stream, form, files)``.
     """
     return FormDataParser(
@@ -121,7 +128,7 @@ def parse_form_data(
         max_content_length,
         cls,
         silent,
-    ).parse_from_environ(environ)
+    ).parse_from_environ(environ, safe_fallback)
 
 
 class FormDataParser:
@@ -192,16 +199,34 @@ class FormDataParser:
     ):
         return self.parse_functions.get(mimetype)
 
-    def parse_from_environ(self, environ: WSGIEnvironment) -> t_parse_result:
+    def parse_from_environ(
+        self,
+        environ: WSGIEnvironment,
+        safe_fallback: bool = True,
+    ) -> t_parse_result:
         """Parses the information from the environment as form data.
 
+        .. versionadded:: 2.3.0
+           The optional `safe_fallback` flag was added.
+
         :param environ: the WSGI environment to be used for parsing.
+        :param safe_fallback: Return an empty stream when ``Content-Length`` is
+            not set. Disabling this allows infinite streams, which can be a
+            denial-of-service risk.
         :return: A tuple in the form ``(stream, form, files)``.
         """
         content_type = environ.get("CONTENT_TYPE", "")
         content_length = get_content_length(environ)
         mimetype, options = parse_options_header(content_type)
-        return self.parse(get_input_stream(environ), mimetype, content_length, options)
+        return self.parse(
+            get_input_stream(
+                environ,
+                safe_fallback,
+            ),
+            mimetype,
+            content_length,
+            options,
+        )
 
     def parse(
         self,

@@ -166,6 +166,52 @@ class TestFormParser:
         assert len(form) == 0
         assert len(files) == 0
 
+    def test_parse_form_data_without_content_length_no_safe_fallback(self):
+        data = (
+            b"--foo\r\n"
+            b"Content-Disposition: form-field; name=foo\r\n\r\n"
+            b"Hello World\r\n"
+            b"--foo\r\n"
+            b"Content-Disposition: form-field; name=bar\r\n\r\n"
+            b"bar=baz\r\n"
+            b"--foo\r\n"
+            b'Content-Disposition: form-data; name="test"; filename="test.txt"\r\n'
+            b"Content-Type: text/plain\r\n\r\n"
+            b"example file\r\n"
+            b"--foo--"
+        )
+        env = create_environ(
+            "/foo",
+            "http://example.org/",
+            method="POST",
+            input_stream=io.BytesIO(data),
+            content_type="multipart/form-data; boundary=foo",
+            content_length=None,
+        )
+        # create_environ automatically adds in content_length, remove it before parse
+        env.pop("CONTENT_LENGTH")
+
+        # Ensure that the parse fails if safe_fallback is defaulted
+        stream, form, files = formparser.parse_form_data(env)
+        assert stream.read() == b""
+        assert len(form) == 0
+        assert len(files) == 0
+
+        # Ensure that the parse fails if safe_fallback is True
+        stream, form, files = formparser.parse_form_data(env, safe_fallback=True)
+        assert stream.read() == b""
+        assert len(form) == 0
+        assert len(files) == 0
+
+        # Ensure that the parse succeeds if safe_fallback is False
+        stream, form, files = formparser.parse_form_data(env, safe_fallback=False)
+        assert stream.read() == b""
+        assert form["foo"] == "Hello World"
+        assert form["bar"] == "bar=baz"
+        file = files["test"]
+        assert file.read() == b"example file"
+        file.close()
+
     @pytest.mark.parametrize(
         ("no_spooled", "size"), ((False, 100), (False, 3000), (True, 100), (True, 3000))
     )
